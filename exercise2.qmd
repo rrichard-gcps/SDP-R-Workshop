@@ -1,0 +1,351 @@
+---
+title: "Data Visualization in R"
+author: "Workshop Instructor"
+format: 
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Introduction
+
+In this exercise, we will visualize the cleaned and prepared data from **Exercise 1** using multiple R packages, including `ggplot2`, `echarts4r`, and `plotly`. This exercise assumes you have already completed the steps in **Exercise 1**, where we loaded, cleaned, and merged the data.
+
+---
+
+## Step 1: Load Necessary Libraries
+
+To begin, let's load the required libraries for this exercise. These include visualization libraries (`ggplot2`, `echarts4r`, `plotly`) and other necessary packages.
+
+```{r}
+library(assertthat)
+library(colorspace)
+library(DT)
+library(flexdashboard)
+library(fontawesome)
+library(glue)
+library(knitr)
+library(lubridate)
+library(readr)
+library(rio)
+library(scales)
+library(shiny)
+library(shinyWidgets)
+library(tidyverse)
+library(echarts4r)
+library(htmltools)
+library(htmlwidgets)
+library(plotly)
+```
+
+## Step 2: Define Color Scheme and Helper Function
+
+We reuse the color scheme and helper function (`rnd_like_xl`) for consistency in the visualizations.
+
+```{r}
+
+load("gosa_data.RData")
+
+# Define color scheme
+color_scheme <- c('#66000040', '#022B3A40','#66666640')
+
+# Excel-like rounding function
+rnd_like_xl <- function(x, y) {
+  round2 <- ifelse(x >= 0, round(x + 1e-09, y), round(x - 1e-09, y))
+  return(round2)
+}
+
+# Define metro districts
+metro_districts <- c(
+  "Gwinnett County", "Cherokee County", "Cobb County", "DeKalb County", 
+  "Douglas County", "Fayette County", "Clayton County", "Forsyth County", 
+  "Fulton County", "Rockdale County", "Atlanta Public Schools", 
+  "Buford City", "Decatur City", "Marietta City"
+)
+```
+
+## Step 3: Visualizing 3rd Grade ELA %P/D by District
+
+We will use **3rd Grade ELA** proficiency data to create a bar chart showing the top 50 districts with the highest proficiency and another focused on Metro Atlanta districts.
+
+### Top 50 Districts in the State
+
+```{r}     
+
+df1 <- graph_data_sys |> filter(acdmc_lvl == '03')      
+
+plt_title_1 <- unique(df1$plt_title)
+plt_subtitle_1 <- unique(df1$plt_subtitle)
+
+df1 |>
+  arrange(desc(pct_prof_dis)) |> 
+  slice_head(n = 50) |> 
+  ggplot(
+    aes(
+      x = reorder(school_dstrct_nm, pct_prof_dis),
+      y = pct_prof_dis,
+      fill = sys_group,
+      color = sys_group, 
+      text = txt_subj
+    )
+  ) +
+  geom_col() +
+  scale_fill_manual(
+    name = "School District Location:",
+    values = color_scheme, 
+    aesthetics = c('color', 'fill')
+  ) +
+  labs(
+    title = plt_title_1, 
+    subtitle = plt_subtitle_1, 
+    x = " ", 
+    y = "% Proficient or Distinguished"
+  ) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom") + 
+  coord_flip()
+```
+
+### Metro Atlanta Districts
+
+```{r}
+df1 |>
+  arrange(desc(pct_prof_dis)) |> 
+  filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |> 
+  ggplot(
+    aes(
+      x = reorder(school_dstrct_nm, pct_prof_dis),
+      y = pct_prof_dis,
+      fill = sys_group,
+      color = sys_group, 
+      text = txt_subj
+    )
+  ) +
+  geom_col() +
+  scale_fill_manual(
+    name = "School District Location:",
+    values = color_scheme, 
+    aesthetics = c('color', 'fill')
+  ) +
+  labs(
+    title = plt_title_1, 
+    subtitle = plt_subtitle_1, 
+    x = " ", 
+    y = "% Proficient or Distinguished"
+  ) + 
+  theme_minimal() + 
+  theme(legend.position = "bottom") + 
+  coord_flip()
+```
+
+## Step 4: Scatter Plot of All Georgia Schools
+
+We will create a scatter plot showing proficiency rates against the percentage of students directly certified.
+
+```{r}
+plt1 <- df1 |>
+  ggplot(
+    aes(
+      x = direct_cert_perc,
+      y = pct_prof_dis,
+      fill = sys_group,
+      color = sys_group, 
+      text = txt_subj
+    )
+  ) +
+  geom_point() +
+  scale_fill_manual(
+    name = "School District:",
+    values = color_scheme, 
+    aesthetics = c('color', 'fill')
+  ) +
+  labs(
+    title = glue('{plt_title_1} by Direct Certification Rate'), 
+    subtitle = plt_subtitle_1, 
+    x = "% Direct Certification", 
+    y = "% Proficient or Distinguished"
+  ) + 
+  theme(legend.position = "bottom")
+```
+
+### Static Plot
+
+```{r}
+# Static version of the scatter plot
+plt1
+```
+
+### Interactive Plot using Plotly
+
+```{r}
+# Convert ggplot to interactive plotly
+ggplotly(plt1, tooltip = c("x", "y", "text"))
+```
+
+## Step 5: Bar Chart using Echarts4r
+
+We will use `echarts4r` to create an interactive bar chart comparing the proficiency rates of Metro Atlanta districts.
+
+```{r}   
+
+df1 |>
+  arrange(pct_prof_dis) |>
+  filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |> 
+  e_charts(school_dstrct_nm) |>
+  e_bar(pct_prof_dis) |>
+  e_add_nested("itemStyle", color = color) |> 
+  e_x_axis(
+    name = "",
+    nameLocation = "middle",
+    nameTextStyle = list(color = "#333", fontSize = 14, fontStyle = 'bolder')
+  ) |>
+  e_y_axis(
+    name = "\n% Proficient or Distinguished",
+    max = 100,
+    nameLocation = "middle",
+    nameTextStyle = list(color = "#333", fontSize = 14, fontStyle = 'bolder')
+  ) |>
+  e_flip_coords() |> # flip axis
+  e_title(
+    text = "Milestones Proficiency Rate (%P/D): Grade 3 ELA EOG",
+    subtext = "Metro Atlanta Public School Systems, School Year 2023-24",
+    sublink = "https://www.gcpsk12.org/Page/24850",
+    textStyle = list(color = "#333", fontWeight = "bolder")
+  )
+```
+
+## Step 6: Scatter Plot using Echarts4r
+
+We will create a scatter plot using `echarts4r`, focusing on the relationship between direct certification percentage and proficiency for school districts and schools.
+
+### Scatter Plot for Districts
+
+```{r}   
+
+df1 |>
+  group_by(factor(sys_group)) |>
+  e_charts(direct_cert_perc) |>
+  e_scatter(pct_prof_dis, bind = tooltip_lbl, symbol_size = 12) |>
+  e_add_nested("itemStyle", color = color) |> 
+  e_x_axis(
+    name = "% Direct Certification",
+    max = 100,
+    interval = 10,
+    nameLocation = "middle",
+    nameTextStyle = list(fontSize = 14)
+  ) |>
+  e_y_axis(
+    name = "% Proficient or Distinguished",
+    max = 100,
+    nameLocation = "middle",
+    nameTextStyle = list(fontSize = 14)
+  ) |>
+  e_theme("infographic") |>
+  e_legend(  
+    selector = list(  
+      list(type = 'all', title = 'Reset')
+    )
+  ) |> 
+  e_color(c("#660000", "#022B3A", "#666666")) |> 
+  e_title(
+    text = "Milestones Proficiency Rate (%P/D): Grade 3 ELA EOG",
+    subtext = "Georgia Public Schools, School Year 2023-24",
+    sublink = "https://www.gcpsk12.org/Page/24850",
+    textStyle = list(color = "#333", fontWeight = "bolder")
+  ) |> 
+  e_tooltip(
+    axisPointer = list(
+      type = "shadow"
+    ), 
+    valueDecimals = 1,
+    formatter = htmlwidgets::JS("
+    function(params) {
+      var vals = params.name.split(',');
+      var pointColor = params.color;
+      var textColor = (pointColor === '#67b7d1' || pointColor === '#CCCCCC') ? '#FFFFFF' : '#000000';
+
+      return (
+        '<div style=\"font-family: Roboto, sans-serif; padding:
+
+ 5px; border: 2px solid ' + pointColor + ';\">' +
+          '<div style=\"background-color:' + pointColor + '; padding: 5px;\">' +
+            '<span style=\"color:' + textColor + '; font-size: 16px; font-weight: 700;\">' + vals[0] + '</span><br/>' +
+            '<span style=\"color:' + textColor + '; font-size: 14px; font-weight: 400;\">' + vals[1] + '</span>' +
+          '</div>' +
+          '<br/><b>Actual Performance:</b> ' + params.value[1] +
+          '<br/><b>Direct Certification:</b> ' + params.value[0] +
+        '</div>'
+      );
+    }
+    ")
+  ) %>%
+  e_toolbox_feature("dataZoom") %>%
+  e_toolbox_feature(
+    feature = "saveAsImage",
+    title = "Save as image"
+  )
+```
+
+### Scatter Plot for Schools
+
+```{r}     
+
+
+df2 <- graph_data |> filter(acdmc_lvl == '03')
+
+df2 |>
+  group_by(factor(sys_group)) |>
+  e_charts(direct_cert_perc) |>
+  e_scatter(pct_prof_dis, bind = tooltip_lbl, symbol_size = 12) |>
+  e_add_nested("itemStyle", color = color) |> 
+  e_x_axis(
+    name = "% Direct Certification",
+    max = 100,
+    interval = 10,
+    nameLocation = "middle",
+    nameTextStyle = list(fontSize = 14)
+  ) |>
+  e_y_axis(
+    name = "% Proficient or Distinguished",
+    max = 100,
+    nameLocation = "middle",
+    nameTextStyle = list(fontSize = 14)
+  ) |>
+  e_theme("infographic") |>
+  e_legend(  
+    selector = list(  
+      list(type = 'all', title = 'Reset')
+    )
+  ) |> 
+  e_color(c("#660000", "#022B3A", "#666666")) |> 
+  e_title(
+    text = "Milestones Proficiency Rate (%P/D): Grade 3 ELA EOG",
+    subtext = "Georgia Public Schools, School Year 2023-24",
+    sublink = "https://www.gcpsk12.org/Page/24850",
+    textStyle = list(color = "#333", fontWeight = "bolder")
+  ) |> 
+  e_tooltip(
+    axisPointer = list(
+      type = "shadow"
+    ), 
+    valueDecimals = 1
+  ) %>%
+  e_toolbox_feature("dataZoom") %>%
+  e_toolbox_feature(
+    feature = "saveAsImage",
+    title = "Save as image"
+  )    
+
+```
+
+---
+
+## Conclusion
+
+In this exercise, we visualized data from the previous exercise using both static and interactive plots. We employed libraries like `ggplot2`, `plotly`, and `echarts4r` to create insightful visualizations, such as bar charts and scatter plots, to display performance metrics for districts and schools in Georgia.

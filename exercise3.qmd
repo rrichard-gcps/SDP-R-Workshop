@@ -1,0 +1,300 @@
+---
+title: "GMAS Performance Dashboard Walkthrough"
+format: html
+---
+
+## Introduction
+
+This document outlines the steps to create the GMAS Performance Dashboard using Quarto, Shiny, and various R libraries.
+
+---
+
+## Step 0: Create a New Project and Set Up a Quarto Dashboard in RStudio
+
+### 0.1: Create a New Project in RStudio
+
+To begin, follow these steps to create a new project in RStudio:
+
+1. **Open RStudio**: Launch RStudio on your computer.
+2. **Create a New Project**:
+   - From the top-left of the RStudio window, click on the `File` menu and select `New Project...`.
+   - In the `New Project` dialog box, choose one of the following options:
+     - `New Directory`: Create a new folder for the project.
+     - `Existing Directory`: Use an existing folder for the project.
+   - If you choose `New Directory`, select `Empty Project`, provide a name and location for your new project folder, and click `Create Project`.
+3. **Project Environment**: Once the project is created, your RStudio interface will be set up with a dedicated environment, file panel, and a new `.Rproj` file in the project folder.
+
+### 0.2: Install Quarto
+
+Quarto is an open-source tool for creating documents, reports, presentations, and dashboards from R and other languages. If you don’t have Quarto installed yet, follow these steps:
+
+1. **Download and Install Quarto**:
+   - Go to the [Quarto website](https://quarto.org/docs/get-started/) and download the installer appropriate for your operating system.
+   - Follow the installation instructions provided for your operating system (Windows, macOS, or Linux).
+   
+2. **Verify Installation**: 
+   - After installing Quarto, open your terminal or command prompt and run the following command to ensure Quarto is installed correctly:
+     ```bash
+     quarto check
+     ```
+
+3. **RStudio Integration**: 
+   - Once installed, Quarto is automatically integrated into RStudio. You’ll see a `Quarto` tab in your toolbar, which allows you to create new Quarto documents, presentations, and dashboards directly from RStudio.
+
+### 0.3: Create a New Quarto Dashboard
+
+Now that the project and Quarto are set up, follow these steps to create a new Quarto dashboard:
+
+1. **Create a New Quarto Document**:
+   - In RStudio, click on the `File` menu, select `New File`, and choose `Quarto Document...`.
+   - In the new document dialog, choose `Dashboard` as the format.
+   
+2. **Set the YAML Header**: 
+   - A new Quarto document will open with a pre-filled YAML header. Modify the header to include `title`, `format`, and `server` options, like this:
+     ```yaml
+     ---
+     title: "GMAS Performance Dashboard"
+     format: dashboard
+     server: shiny
+     ---
+     ```
+   - This header ensures that the document will be rendered as a Shiny dashboard.
+
+3. **Save the Document**: 
+   - Save the document with a `.qmd` extension (e.g., `dashboard.qmd`).
+---
+
+
+## Step 1: Load Libraries and Setup
+
+The first step is to load the necessary libraries for data processing, visualization, and the Shiny dashboard framework. Additionally, we will load the required dataset (`gosa_data.RData`).
+
+```{r eval=FALSE}
+#| echo: true
+
+# Load required libraries
+library(assertthat)
+library(colorspace)
+library(DT)
+library(echarts4r)
+library(echarts4r.assets)
+library(flexdashboard)
+library(fontawesome)
+library(ggthemes)
+library(glue)
+library(htmltools)
+library(htmlwidgets)
+library(knitr)
+library(lubridate)
+library(plotly)
+library(quarto)
+library(readr)
+library(rio)
+library(scales)
+library(shiny)
+library(shinydashboard)
+library(shinyWidgets)
+library(tidyverse)
+
+# Load data
+load("gosa_data.RData")
+
+# Define color scheme
+color_scheme <- c('#66000040', '#022B3A40','#66666640')
+
+# Excel-like rounding function
+rnd_like_xl <- function(x, y) {
+  ifelse(x >= 0, round(x + 1e-09, y), round(x - 1e-09, y))
+}
+
+# Define metro districts
+metro_districts <- c(
+  "Gwinnett County", "Cherokee County", "Cobb County", "DeKalb County", 
+  "Douglas County", "Fayette County", "Clayton County", "Forsyth County", 
+  "Fulton County", "Rockdale County", "Atlanta Public Schools", 
+  "Buford City", "Decatur City", "Marietta City"
+)
+
+# Check if the dataset is loaded
+if (!exists("graph_data_sys")) {
+  stop("graph_data_sys not found. Please load the correct dataset.")
+}
+```
+
+---
+
+## Step 2: Sidebar Creation
+
+This section creates a sidebar in the dashboard allowing the user to select a grade level from a dropdown menu.
+
+```{r eval=FALSE}
+#| echo: true
+
+# Define available grade levels
+grade_choices <- sort(unique(graph_data_sys$grade_input))
+
+# Create grade level input
+selectInput(
+  inputId = 'grade_lev',
+  label = h5('Grade Level:'),
+  choices = if (length(grade_choices) > 0) grade_choices else "No Data",
+  selected = if (length(grade_choices) > 0) grade_choices[[1]] else NULL
+)
+```
+
+---
+
+## Step 3: Create Bar Graph with `ggplotly`
+
+This code block creates a bar graph of district performance using `ggplot2` and makes it interactive using `plotly`.
+
+```{r eval=FALSE}
+#| echo: true
+
+# Reactive data based on grade level input
+df_sys <- reactive({
+  req(input$grade_lev)
+  graph_data_sys |> filter(grade_input == input$grade_lev)
+})
+
+# Render plot with ggplot and plotly
+output$plot_1g <- renderPlotly({
+  df1 <- df_sys()
+  req(nrow(df1) > 0)
+  
+  # Extract title and subtitle
+  plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
+  plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
+  
+  plt <- df1 |> 
+    arrange(desc(pct_prof_dis)) |>
+    filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |>
+    ggplot(aes(
+      x = reorder(school_dstrct_nm, pct_prof_dis),
+      y = pct_prof_dis,
+      fill = sys_group,
+      color = sys_group,
+      text = txt_subj
+    )) +
+    geom_col() +
+    scale_fill_manual(
+      name = "School District Location:",
+      values = color_scheme,
+      aesthetics = c('color', 'fill')
+    ) +
+    labs(
+      title = plt_title_1,
+      subtitle = plt_subtitle_1,
+      x = " ",
+      y = "% Proficient or Distinguished"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    coord_flip()
+  
+  ggplotly(plt)
+})
+```
+
+---
+
+## Step 4: Create Bar Graph with `echarts4r`
+
+This section creates a bar graph using `echarts4r` to provide an alternative visualization.
+
+```{r eval=FALSE}
+#| echo: true
+
+# Render plot with echarts4r
+output$plot_1e <- renderEcharts4r({
+  df1 <- df_sys()
+  req(nrow(df1) > 0)
+  
+  # Extract title and subtitle
+  plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
+  plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
+  
+  df1 |> 
+    arrange(pct_prof_dis) |> 
+    filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |> 
+    e_charts(school_dstrct_nm) |> 
+    e_bar(pct_prof_dis, bind = tooltip_lbl) |> 
+    e_flip_coords() |> 
+    e_title(text = plt_title_1, subtext = plt_subtitle_1)
+})
+```
+
+---
+
+## Step 5: Create Scatterplot with `ggplotly`
+
+This section creates a scatterplot of performance data using `ggplotly`.
+
+```{r eval=FALSE}
+#| echo: true
+
+# Render scatter plot with ggplot and plotly
+output$plot_2g <- renderPlotly({
+  df1 <- df_sys()
+  req(nrow(df1) > 0)
+  
+  # Extract title and subtitle
+  plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
+  plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
+  
+  plt <- df1 |> 
+    ggplot(aes(
+      x = direct_cert_perc,
+      y = pct_prof_dis,
+      fill = sys_group,
+      color = sys_group,
+      text = txt_subj
+    )) +
+    geom_point() +
+    scale_fill_manual(values = color_scheme) +
+    labs(
+      title = glue('{plt_title_1} by Direct Certification Rate'),
+      subtitle = plt_subtitle_1,
+      x = "% Direct Certification",
+      y = "% Proficient or Distinguished"
+    ) + 
+    theme_minimal()
+  
+  ggplotly(plt)
+})
+```
+
+---
+
+## Step 6: Create Scatterplot with `echarts4r`
+
+The final visualization section shows how to create the same scatterplot using `echarts4r`.
+
+```{r eval=FALSE}
+#| echo: true
+
+# Render scatter plot with echarts4r
+output$plot_2e <- renderEcharts4r({
+  df1 <- df_sys()
+  req(nrow(df1) > 0)
+  
+  # Extract title and subtitle
+  plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
+  plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
+  
+  df1 |> 
+    e_charts(direct_cert_perc) |> 
+    e_scatter(pct_prof_dis, bind = tooltip_lbl) |> 
+    e_flip_coords() |> 
+    e_title(text = glue('{plt_title_1} by Direct Certification Rate'), subtext = plt_subtitle_1)
+})
+```
+
+---
+
+## Conclusion
+
+This document details the creation of a GMAS performance dashboard using `ggplotly`, `echarts4r`, and Shiny in Quarto. The next steps would be to fully implement school-level examples in development.
+```
+
+This structured Quarto HTML guide provides an outline for building the dashboard and includes code snippets without execution, perfect for your workshop. 

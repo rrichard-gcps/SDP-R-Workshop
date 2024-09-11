@@ -1,0 +1,278 @@
+---
+title: "Data Download and Wrangling for Visualization"
+author: "Workshop Instructor"
+format: 
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Introduction
+
+This workshop will guide you through downloading, cleaning, and preparing datasets for visualization. You'll use a variety of libraries in R, such as `tidyverse`, `janitor`, and `readxl`. We will go through loading, cleaning, merging datasets, and preparing the data for visualization.
+
+---
+
+## Step 1: Load Necessary Libraries
+
+To begin, let's load the required R libraries for handling our datasets.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)  # For reading Excel files
+library(glue)
+
+color_scheme <- c('#66000080', '#022B3A80','#66666680')
+```
+
+## Step 2: Define Helper Functions
+
+We define two helper functions:
+- `rnd_like_xl`: Rounds values in a way similar to Excel.
+- `%out%`: A negation operator for simplifying exclusion logic.
+
+```{r}
+rnd_like_xl <- function(x, y) {
+  round2 <- ifelse(x >= 0, round(x + 1e-09, y), round(x - 1e-09, y))
+  return(round2)
+}
+
+`%out%` <- Negate(`%in%`)
+```
+
+## Step 3: Define Metro Districts and Dataset URLs
+
+We define a list of metro districts and the URLs of the datasets we will download and use in this workshop.
+
+```{r}
+metro_districts <- c(
+  "Cherokee County", "Cobb County", "DeKalb County", "Douglas County", 
+  "Fayette County", "Clayton County", "Forsyth County", "Fulton County", 
+  "Gwinnett County", "Rockdale County", "Atlanta Public Schools", 
+  "Buford City", "Decatur City", "Marietta City"
+)
+
+# Dataset URLs
+url1 <- "https://download.gosa.ga.gov/2023/EOG_by_GRADE_2022-23__GA_TST_AGGR_2023-12-15_18_54_21.csv"
+url2 <- "https://download.gosa.ga.gov/2023/Enrollment_by_Subgroup_Metrics_2022-23_2023-12-15_18_54_53.csv"
+url3 <- "https://download.gosa.ga.gov/2023/Attendance_2022-23_2023-12-15_18_55_15.csv"
+url4 <- "https://download.gosa.ga.gov/2023/2023_directly_certified_school.xls"
+url5 <- "https://download.gosa.ga.gov/2023/2023_School_Mobility_for_Display.xls"
+url6 <- "https://download.gosa.ga.gov/2023/2023_directly_certified_district.xls"
+url7 <- "https://download.gosa.ga.gov/2023/2023_District_Mobility_for_Display.xls"
+```
+
+## Step 4: Download and Read the Data
+
+Next, we download the datasets from the provided URLs and load them into R using `read_csv` for CSV files and `read_excel` for Excel files.
+
+```{r}
+# Download the datasets
+download.file(url1, destfile = "EOG_by_GRADE_2022-23.csv")
+download.file(url2, destfile = "Enrollment_by_Subgroup_Metrics_2022-23.csv")
+download.file(url3, destfile = "Attendance_2022-23.csv")
+download.file(url4, destfile = "Directly_Certified_School_2023.xls")
+download.file(url5, destfile = "School_Mobility.xls")
+download.file(url6, destfile = "Directly_Certified_District_2023.xls")
+download.file(url7, destfile = "District_Mobility.xls")
+
+# Read the datasets into R
+data1 <- read_csv("EOG_by_GRADE_2022-23.csv")
+data2 <- read_csv("Enrollment_by_Subgroup_Metrics_2022-23.csv")
+data3 <- read_csv("Attendance_2022-23.csv")
+data4 <- read_excel("Directly_Certified_School_2023.xls")
+data5 <- read_excel("School_Mobility.xls")
+data6 <- read_excel("Directly_Certified_District_2023.xls")
+data7 <- read_excel("District_Mobility.xls")
+
+# Preview the data
+head(data1)
+head(data2)
+head(data3)
+head(data4)
+head(data5)
+head(data6)
+head(data7)
+```
+
+## Step 5: Data Cleaning
+
+We perform some initial cleaning on the datasets:
+- Clean column names.
+- Convert columns to numeric where necessary.
+
+```{r}
+# Clean and transform datasets
+cleaned_data1 <- data1 |> 
+  clean_names() |> 
+  mutate(across(ends_with('_pct'), ~as.double(.x))) |> 
+  mutate(across(ends_with('_cnt'), ~as.double(.x)))
+
+cleaned_data2 <- data2 |> 
+  clean_names() |> 
+  mutate(across(contains(c('_pct', '_cnt', '_count', '_percent')), ~as.double(.x)))
+
+cleaned_data3 <- data3 |>
+  clean_names() |> 
+  mutate(across(contains(c('_pct', '_cnt', '_count', '_perc')), ~as.double(.x)))
+
+cleaned_data4 <- data4 |> 
+  clean_names() |> 
+  mutate(
+    sys_sch = str_trim(as.character(sys_sch), "both"),
+    school_id = str_trim(sprintf("%04i",school_id),"both"),
+    system_id = str_trim(as.character(system_id),"both")
+  )
+
+cleaned_data5 <- data5 |> 
+  clean_names() |> 
+  mutate(sys_sch = str_trim(as.character(sys_sch), "both"))
+
+cleaned_data6 <- data6 |> 
+  clean_names() |> 
+  mutate(system_id   = str_trim(sprintf("%03i",system_id ),"both"))
+
+cleaned_data7 <- data7 |> 
+  clean_names() |> 
+  mutate(school_district_cd  = str_trim(sprintf("%03i",school_district_cd),"both"))
+```
+
+## Step 6: Display Cleaned Data Structure
+
+To better understand the structure of the cleaned datasets, we inspect their structure using `str()`.
+
+```{r}
+str(cleaned_data1)
+str(cleaned_data2)
+str(cleaned_data3)
+str(cleaned_data4)
+str(cleaned_data5)
+str(cleaned_data6)
+str(cleaned_data7)
+```
+
+## Step 7: Merge Datasets
+
+Now we merge the cleaned datasets into a single dataset for further analysis and visualization.
+
+```{r}
+merged_data <- cleaned_data1 |> 
+  inner_join(
+    cleaned_data2,
+    by = join_by(
+      school_distrct_cd == school_dstrct_cd,
+      instn_number == instn_number,
+      school_dstrct_nm == school_dstrct_nm,
+      instn_name == instn_name,
+      long_school_year == long_school_year
+    )
+  ) |> 
+  inner_join(
+    cleaned_data3,
+    by = join_by(
+      school_distrct_cd == school_dstrct_cd,
+      instn_number == instn_number,
+      school_dstrct_nm == school_dstrct_nm,
+      instn_name == instn_name
+    )
+  ) |> 
+  inner_join(
+    cleaned_data4,
+    by = join_by(
+      school_distrct_cd == system_id,
+      instn_number == school_id,
+      school_dstrct_nm == system_name,
+      instn_name == school_name
+    )
+  ) |> 
+  inner_join(
+    cleaned_data5,
+    by = join_by(
+      sys_sch == sys_sch,
+      school_dstrct_nm == school_district_nm,
+      instn_name == school_name
+    )
+  )
+```
+
+## Step 8: Prepare Data for Graphing
+
+We filter the data and prepare a dataset for visualizing performance metrics. This includes calculating proficiency levels and labeling metro districts.
+
+```{r}
+graph_data <- merged_data |>
+  filter(
+    str_detect(school_distrct_cd, "^\\d{3}$") &
+      school_distrct_cd %out% c("799", "891") &
+      subgroup_name == "All Students" &
+      test_cmpnt_typ_nm == "English Language Arts"
+  ) |>
+  select(
+    school_distrct_cd, school_dstrct_nm, instn_number, instn_name, 
+    acdmc_lvl, subgroup_name, test_cmpnt_typ_nm, num_tested_cnt, begin_pct, 
+    developing_pct, proficient_pct, distinguished_pct, enroll_pct_asian, 
+    enroll_pct_native, enroll_pct_black, enroll_pct_hispanic, enroll_pct_multiracial, 
+    enroll_pct_white, enroll_pct_migrant, enroll_pct_ed, enroll_pct_swd, 
+    enroll_pct_lep, enroll_pct_gifted, direct_cert_perc, chronic_absent_perc_all, 
+    mobility
+  ) |>
+  mutate(pct_prof_dis = proficient_pct + distinguished_pct) |>
+  relocate(pct_prof_dis, .after = distinguished_pct) |>
+  mutate(
+    sys_group = case_when(
+      school_distrct_cd == "667" ~ "GCPS",
+      school_dstrct_nm %in% metro_districts
+
+ & school_distrct_cd != "667" ~ "Metro Atlanta",
+      TRUE ~ "Other GA System"
+    )
+  )
+```
+
+## Step 9: Prepare Graph Labels and Tooltips
+
+We generate tooltips and prepare labels for graphs, which will enhance user interactivity when creating visualizations.
+
+```{r}
+graph_data <- graph_data |>
+  mutate(across(
+    c(
+      distinguished_pct, enroll_pct_asian, enroll_pct_native, 
+      enroll_pct_black, enroll_pct_hispanic, enroll_pct_multiracial, 
+      enroll_pct_white, enroll_pct_migrant, enroll_pct_ed, enroll_pct_swd, 
+      enroll_pct_lep, enroll_pct_gifted, direct_cert_perc, chronic_absent_perc_all, 
+      mobility
+    ), ~ rnd_like_xl(replace_na(.x, 0), 1)
+  )) |> 
+  mutate(
+    tooltip_lbl = paste(
+      instn_name, school_dstrct_nm, num_tested_cnt, enroll_pct_asian, 
+      enroll_pct_native, enroll_pct_black, enroll_pct_hispanic, enroll_pct_multiracial, 
+      enroll_pct_white, enroll_pct_migrant, enroll_pct_ed, enroll_pct_swd, 
+      enroll_pct_lep, enroll_pct_gifted, direct_cert_perc, chronic_absent_perc_all, 
+      mobility, sep = ","
+    ),
+    plt_title = glue('Grade {sprintf("%1i",as.integer(acdmc_lvl))} {test_cmpnt_typ_nm} Performance'),
+    plt_subtitle = glue('{subgroup_name} School Year 2023-24'),
+    color = case_when(
+      sys_group == "GCPS" ~ "#66000080", 
+      sys_group == "Metro Atlanta" ~ "#022B3A80", 
+      TRUE ~ "#66666680"
+    )
+  )
+```
+
+---
+
+## Conclusion
+
+By following these steps, you have successfully cleaned, merged, and prepared the datasets for visualization. The final `graph_data` object is ready for graphing, including interactive tooltips and well-labeled plot titles.
+
+Feel free to extend the analysis and create your own visualizations using the `graph_data` dataset.
