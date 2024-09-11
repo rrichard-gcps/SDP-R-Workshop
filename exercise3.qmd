@@ -297,4 +297,3 @@ output$plot_2e <- renderEcharts4r({
 This document details the creation of a GMAS performance dashboard using `ggplotly`, `echarts4r`, and Shiny in Quarto. The next steps would be to fully implement school-level examples in development.
 ```
 
-This structured Quarto HTML guide provides an outline for building the dashboard and includes code snippets without execution, perfect for your workshop. 
