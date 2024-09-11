@@ -1,78 +1,12 @@
 ---
-title: "GMAS Performance Dashboard Walkthrough"
-format: html
----
+title: "GMAS Performance Dashboard"
+format: dashboard
+server: shiny
+--- 
+  
+```{r}
+#| context: setup
 
-## Introduction
-
-This document outlines the steps to create the GMAS Performance Dashboard using Quarto, Shiny, and various R libraries.
-
----
-
-## Step 0: Create a New Project and Set Up a Quarto Dashboard in RStudio
-
-### 0.1: Create a New Project in RStudio
-
-To begin, follow these steps to create a new project in RStudio:
-
-1. **Open RStudio**: Launch RStudio on your computer.
-2. **Create a New Project**:
-   - From the top-left of the RStudio window, click on the `File` menu and select `New Project...`.
-   - In the `New Project` dialog box, choose one of the following options:
-     - `New Directory`: Create a new folder for the project.
-     - `Existing Directory`: Use an existing folder for the project.
-   - If you choose `New Directory`, select `Empty Project`, provide a name and location for your new project folder, and click `Create Project`.
-3. **Project Environment**: Once the project is created, your RStudio interface will be set up with a dedicated environment, file panel, and a new `.Rproj` file in the project folder.
-
-### 0.2: Install Quarto
-
-Quarto is an open-source tool for creating documents, reports, presentations, and dashboards from R and other languages. If you don’t have Quarto installed yet, follow these steps:
-
-1. **Download and Install Quarto**:
-   - Go to the [Quarto website](https://quarto.org/docs/get-started/) and download the installer appropriate for your operating system.
-   - Follow the installation instructions provided for your operating system (Windows, macOS, or Linux).
-   
-2. **Verify Installation**: 
-   - After installing Quarto, open your terminal or command prompt and run the following command to ensure Quarto is installed correctly:
-     ```bash
-     quarto check
-     ```
-
-3. **RStudio Integration**: 
-   - Once installed, Quarto is automatically integrated into RStudio. You’ll see a `Quarto` tab in your toolbar, which allows you to create new Quarto documents, presentations, and dashboards directly from RStudio.
-
-### 0.3: Create a New Quarto Dashboard
-
-Now that the project and Quarto are set up, follow these steps to create a new Quarto dashboard:
-
-1. **Create a New Quarto Document**:
-   - In RStudio, click on the `File` menu, select `New File`, and choose `Quarto Document...`.
-   - In the new document dialog, choose `Dashboard` as the format.
-   
-2. **Set the YAML Header**: 
-   - A new Quarto document will open with a pre-filled YAML header. Modify the header to include `title`, `format`, and `server` options, like this:
-     ```yaml
-     ---
-     title: "GMAS Performance Dashboard"
-     format: dashboard
-     server: shiny
-     ---
-     ```
-   - This header ensures that the document will be rendered as a Shiny dashboard.
-
-3. **Save the Document**: 
-   - Save the document with a `.qmd` extension (e.g., `dashboard.qmd`).
----
-
-
-## Step 1: Load Libraries and Setup
-
-The first step is to load the necessary libraries for data processing, visualization, and the Shiny dashboard framework. Additionally, we will load the required dataset (`gosa_data.RData`).
-
-```{r eval=FALSE}
-#| echo: true
-
-# Load required libraries
 library(assertthat)
 library(colorspace)
 library(DT)
@@ -96,7 +30,6 @@ library(shinydashboard)
 library(shinyWidgets)
 library(tidyverse)
 
-# Load data
 load("gosa_data.RData")
 
 # Define color scheme
@@ -115,58 +48,55 @@ metro_districts <- c(
   "Buford City", "Decatur City", "Marietta City"
 )
 
-# Check if the dataset is loaded
+# Check if graph_data_sys is loaded properly
 if (!exists("graph_data_sys")) {
   stop("graph_data_sys not found. Please load the correct dataset.")
-}
+}     
+
 ```
 
----
+# {.sidebar}
 
-## Step 2: Sidebar Creation
+```{r}     
 
-This section creates a sidebar in the dashboard allowing the user to select a grade level from a dropdown menu.
-
-```{r eval=FALSE}
-#| echo: true
-
-# Define available grade levels
 grade_choices <- sort(unique(graph_data_sys$grade_input))
 
-# Create grade level input
 selectInput(
   inputId = 'grade_lev',
   label = h5('Grade Level:'),
   choices = if (length(grade_choices) > 0) grade_choices else "No Data",
   selected = if (length(grade_choices) > 0) grade_choices[[1]] else NULL
 )
-```
 
----
 
-## Step 3: Create Bar Graph with `ggplotly`
 
-This code block creates a bar graph of district performance using `ggplot2` and makes it interactive using `plotly`.
+```     
 
-```{r eval=FALSE}
-#| echo: true
 
-# Reactive data based on grade level input
+```{r}  
+#| context: server
+
+# Create Bar Graphs
+
 df_sys <- reactive({
-  req(input$grade_lev)
-  graph_data_sys |> filter(grade_input == input$grade_lev)
+  req(input$grade_lev)  # Ensure input is available
+  graph_data_sys |>
+    filter(grade_input == input$grade_lev)
 })
 
-# Render plot with ggplot and plotly
 output$plot_1g <- renderPlotly({
   df1 <- df_sys()
+  
+  # Check if df1 has data
   req(nrow(df1) > 0)
   
-  # Extract title and subtitle
-  plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
-  plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
+  # Ensure variables like plt_title and plt_subtitle exist in the dataset
+  plt_title_1 <-
+    unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
+  plt_subtitle_1 <-
+    unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
   
-  plt <- df1 |> 
+  plt <- df1 |>
     arrange(desc(pct_prof_dis)) |>
     filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |>
     ggplot(aes(
@@ -193,107 +123,270 @@ output$plot_1g <- renderPlotly({
     coord_flip()
   
   ggplotly(plt)
+  
 })
-```
-
----
-
-## Step 4: Create Bar Graph with `echarts4r`
-
-This section creates a bar graph using `echarts4r` to provide an alternative visualization.
-
-```{r eval=FALSE}
-#| echo: true
-
-# Render plot with echarts4r
 output$plot_1e <- renderEcharts4r({
   df1 <- df_sys()
+  
+  # Check if df1 has data
   req(nrow(df1) > 0)
   
-  # Extract title and subtitle
-  plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
-  plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
+  # Ensure variables like plt_title and plt_subtitle exist in the dataset
+  plt_title_1 <-
+    unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
+  plt_subtitle_1 <-
+    unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
   
-  df1 |> 
-    arrange(pct_prof_dis) |> 
-    filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |> 
-    e_charts(school_dstrct_nm) |> 
-    e_bar(pct_prof_dis, bind = tooltip_lbl) |> 
-    e_flip_coords() |> 
-    e_title(text = plt_title_1, subtext = plt_subtitle_1)
-})
-```
+  df1 |>
+    arrange(pct_prof_dis) |>
+    filter(school_dstrct_nm %in% c(metro_districts, "State of Georgia")) |>
+    e_charts(school_dstrct_nm) |>
+    e_bar(pct_prof_dis,bind = tooltip_lbl) |>
+    e_legend(show = FALSE) |>
+    e_add_nested("itemStyle", color = color) |>
+    e_x_axis(
+      name = "",
+      nameLocation = "middle",
+      nameTextStyle = list(
+        color = "#333",
+        fontSize = 14,
+        fontStyle = 'bolder'
+      )
+    ) |>
+    e_y_axis(
+      name = "\n% Proficient or Distinguished",
+      max = 100,
+      nameLocation = "middle",
+      nameTextStyle = list(
+        color = "#333",
+        fontSize = 14,
+        fontStyle = 'bolder'
+      )
+    ) |>
+    e_flip_coords() |>
+    e_title(
+      text = plt_title_1,
+      subtext = plt_subtitle_1,
+      sublink = "https://www.gcpsk12.org/Page/24850",
+      textStyle = list(color = "#333", fontWeight = "bolder")
+    ) |>
+    e_tooltip(
+      axisPointer = list(type = "shadow"),
+      valueDecimals = 1,
+      backgroundColor = "#FFFFFF",
+      formatter = htmlwidgets::JS(
+        "
+    function(params) {
+      var vals = params.name.split(',');
+      var pointColor = params.color; // Accessing the color of the point
+      var textColor;
 
----
+      // Define text color based on point color brightness
+      if (pointColor === '#67b7d1' || pointColor === '#CCCCCC') {
+        textColor = '#FFFFFF'; // Light text for darker background
+      } else {
+        textColor = '#000000'; // Dark text for lighter background
+      }
 
-## Step 5: Create Scatterplot with `ggplotly`
+      // Function to format values to one decimal place
+      function formatValue(value) {
+        return parseFloat(value).toFixed(1);
+      }
 
-This section creates a scatterplot of performance data using `ggplotly`.
-
-```{r eval=FALSE}
-#| echo: true
-
-# Render scatter plot with ggplot and plotly
+      return (
+        '<div style=\"font-family: Roboto, sans-serif; padding: 5px; border: 2px solid ' + pointColor + ';\">' +
+          '<div style=\"background-color:' + pointColor + '; padding: 5px;\">' +
+            '<span style=\"color:' + textColor + '; font-size: 16px; font-weight: 700;\">' + vals[0] + '</span>' +'</div>' +
+          '<hr style=\"border-color:' + pointColor + ';\">' +
+          '<br/><b style=\"font-weight: 700; text-decoration: underline;\">School Year 2023-24 Values:</b>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 500;\"><b>% Proficient or Distinguished:</b> ' + formatValue(params.value[0]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 500;\"><b>% Direct Certification:</b> ' + formatValue(vals[13]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Number Tested:</b> ' + vals[1] + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Multilingual Learners:</b> ' + formatValue(vals[11]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Mobility Rate:</b> ' + formatValue(vals[15]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Special Education:</b> ' + formatValue(vals[10]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Gifted Students:</b> ' + formatValue(vals[12]) + '</span>' +
+        '</div>'
+      );
+    }
+  "
+      )
+    ) |>
+    e_toolbox_feature("dataZoom") |>
+    e_toolbox_feature(feature = "saveAsImage",
+                      title = "Save as image")
+})         
 output$plot_2g <- renderPlotly({
+  
   df1 <- df_sys()
+  
+  # Check if df1 has data
   req(nrow(df1) > 0)
   
-  # Extract title and subtitle
+  # Ensure variables like plt_title and plt_subtitle exist in the dataset
   plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
   plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
   
-  plt <- df1 |> 
-    ggplot(aes(
-      x = direct_cert_perc,
-      y = pct_prof_dis,
-      fill = sys_group,
-      color = sys_group,
-      text = txt_subj
-    )) +
+  plt <- df1 |>
+    ggplot(
+      aes(
+        x = direct_cert_perc,
+        y = pct_prof_dis,
+        fill = sys_group,
+        color = sys_group, 
+        text = txt_subj
+      )
+    ) +
     geom_point() +
-    scale_fill_manual(values = color_scheme) +
+    scale_fill_manual(
+      name = "School District:",
+      values = color_scheme, 
+      aesthetics = c('color', 'fill')
+    ) +
     labs(
-      title = glue('{plt_title_1} by Direct Certification Rate'),
-      subtitle = plt_subtitle_1,
-      x = "% Direct Certification",
+      title = glue('{plt_title_1} by Direct Certification Rate'), 
+      subtitle = plt_subtitle_1, 
+      x = "% Direct Certification", 
       y = "% Proficient or Distinguished"
     ) + 
-    theme_minimal()
+    theme(legend.position = "bottom")
   
   ggplotly(plt)
-})
-```
-
----
-
-## Step 6: Create Scatterplot with `echarts4r`
-
-The final visualization section shows how to create the same scatterplot using `echarts4r`.
-
-```{r eval=FALSE}
-#| echo: true
-
-# Render scatter plot with echarts4r
+  
+})     
 output$plot_2e <- renderEcharts4r({
+  
   df1 <- df_sys()
+  
+  # Check if df1 has data
   req(nrow(df1) > 0)
   
-  # Extract title and subtitle
+  # Ensure variables like plt_title and plt_subtitle exist in the dataset
   plt_title_1 <- unique(df1$plt_title) %>% ifelse(length(.) > 0, ., "Title not found")
   plt_subtitle_1 <- unique(df1$plt_subtitle) %>% ifelse(length(.) > 0, ., "Subtitle not found")
   
-  df1 |> 
-    e_charts(direct_cert_perc) |> 
-    e_scatter(pct_prof_dis, bind = tooltip_lbl) |> 
-    e_flip_coords() |> 
-    e_title(text = glue('{plt_title_1} by Direct Certification Rate'), subtext = plt_subtitle_1)
-})
+df1 |>
+  group_by(factor(sys_group)) |>
+  e_charts(direct_cert_perc) |>
+  e_scatter(pct_prof_dis, bind = tooltip_lbl, symbol_size = 18) |>
+  e_add_nested("itemStyle", color = color) |> 
+  e_x_axis(
+    name = "% Direct Certification",
+    max = 100,
+    interval = 10,
+    nameLocation = "middle",
+    nameTextStyle = list(fontSize = 14)
+  ) |>
+  e_y_axis(
+    name = "% Proficient or Distinguished",
+    max = 100,
+    nameLocation = "middle",
+    nameTextStyle = list(fontSize = 14)
+  ) |>
+  e_theme("infographic") |>
+  e_legend(
+    orient = 'horizontal',
+    left = 0,
+    bottom = 0,
+          selector = list(  
+        list(type = 'all', title = 'Reset')
+      )
+  ) |> 
+  e_title(
+    text =  glue('{plt_title_1} by Direct Certification Rate'),
+    subtext = plt_subtitle_1,
+    sublink = "https://www.gcpsk12.org/Page/24850",
+    textStyle = list(color = "#333", fontWeight = "bolder")
+  ) |>
+  e_tooltip(
+    axisPointer = list(
+      type = "shadow"
+    ), 
+    valueDecimals = 1,
+    backgroundColor = "#FFFFFF",
+    formatter = htmlwidgets::JS("
+    function(params) {
+      var vals = params.name.split(',');
+      var pointColor = params.color; // Accessing the color of the point
+      var textColor;
+
+      // Define text color based on point color brightness
+      if (pointColor === '#67b7d1' || pointColor === '#CCCCCC') {
+        textColor = '#FFFFFF'; // Light text for darker background
+      } else {
+        textColor = '#000000'; // Dark text for lighter background
+      }
+
+      // Function to format values to one decimal place
+      function formatValue(value) {
+        return parseFloat(value).toFixed(1);
+      }
+
+      return (
+        '<div style=\"font-family: Roboto, sans-serif; padding: 5px; border: 2px solid ' + pointColor + ';\">' +
+          '<div style=\"background-color:' + pointColor + '; padding: 5px;\">' +
+            '<span style=\"color:' + textColor + '; font-size: 16px; font-weight: 700;\">' + vals[0] + '</span><br/>' +
+          '</div>' +
+          '<hr style=\"border-color:' + pointColor + ';\">' +
+          '<br/><b style=\"font-weight: 700; text-decoration: underline;\">School Year 2023-24 Values:</b>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 500;\"><b>% Proficient or Distinguished:</b> ' + formatValue(params.value[1]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 500;\"><b>% Direct Certification:</b> ' + formatValue(params.value[0]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Number Tested:</b> ' + vals[1] + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Multilingual Learners:</b> ' + formatValue(vals[11]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Mobility Rate:</b> ' + formatValue(vals[15]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Special Education:</b> ' + formatValue(vals[10]) + '</span>' +
+          '<br/><span style=\"font-size: 12px; font-weight: 400;\"><b>Gifted Students:</b> ' + formatValue(vals[12]) + '</span>' +
+        '</div>'
+      );
+    }
+  ")
+  ) |>
+  e_toolbox_feature("dataZoom") |>
+  e_toolbox_feature(
+    feature = "saveAsImage",
+    title = "Save as image"
+  )
+   
+})         
+
+
 ```
 
----
+# District Performance 
 
-## Conclusion
+## Row {.tabset}    
 
-This document details the creation of a GMAS performance dashboard using `ggplotly`, `echarts4r`, and Shiny in Quarto. The next steps would be to fully implement school-level examples in development.
+### Barplot - `ggplotly`
+```{r}
+plotlyOutput('plot_1g')
 ```
+
+### Barplot - `echarts4r`
+
+```{r}
+echarts4rOutput('plot_1e')
+```
+
+### Scatterplot - `ggplotly`
+```{r}
+plotlyOutput('plot_2g')
+```
+
+### Scatterplot - `echarts4r`
+
+```{r}
+echarts4rOutput('plot_2e')
+```
+
+# School Performance     
+
+
+::: {.callout-note icon=false}
+## In Development
+
+##### School-level example to be updated and posted here shortly
+
+:::
+
+
 
